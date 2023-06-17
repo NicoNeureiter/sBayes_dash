@@ -104,6 +104,7 @@ class AppState:
 
 # Initialized app
 app = JupyterDash(__name__)
+server = app.server
 state = AppState()
 
 
