@@ -204,8 +204,6 @@ class Data:
     features: Features
     confounders: OrderedDict[str, Confounder]
     crs: Optional[pyproj.CRS]
-    geo_cost_matrix: Optional[NDArray[float]]
-    network: ComputeNetwork
     logger: Logger
 
     def __init__(
@@ -214,7 +212,6 @@ class Data:
         features: Features,
         confounders: OrderedDict[str, Confounder],
         projection: Optional[str] = "epsg:4326",
-        geo_costs: Literal["from_data"] | PathLike = "from_data",
         logger: Logger = None,
     ):
         self.objects = objects
@@ -227,16 +224,7 @@ class Data:
             for conf_name, conf in self.confounders.items()
         }
         self.features.features_by_group = self.features_by_group
-
         self.crs = pyproj.CRS(projection)
-        self.network = ComputeNetwork(self.objects, crs=self.crs)
-
-        if geo_costs == "from_data":
-            self.geo_cost_matrix = self.network.dist_mat
-        else:
-            self.geo_cost_matrix = read_geo_cost_matrix(
-                object_names=self.objects.id, file=geo_costs, logger=self.logger
-            )
 
     @classmethod
     def from_config(cls: Type[S], config, logger=None) -> S:
