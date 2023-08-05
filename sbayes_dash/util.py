@@ -29,7 +29,6 @@ PathLike = Union[str, Path]
 """Convenience type for cases where `str` or `Path` are acceptable types."""
 
 
-
 def encode_cluster(cluster: NDArray[bool]) -> str:
     """Format the given cluster as a compact bit-string."""
     cluster_s = cluster.astype(int).astype(str)
@@ -299,22 +298,6 @@ def read_data_csv(csv_path: PathLike | io.StringIO) -> pd.DataFrame:
     return data.applymap(normalize_str)
 
 
-def read_costs_from_csv(file: str, logger=None):
-    """This is a helper function to read the cost matrix from a csv file
-        Args:
-            file: file location of the csv file
-            logger: Logger objects for printing info message.
-
-        Returns:
-            pd.DataFrame: cost matrix
-        """
-
-    data = pd.read_csv(file, dtype=str, index_col=0)
-    if logger:
-        logger.info(f"Geographical cost matrix read from {file}.")
-    return data
-
-
 def write_languages_to_csv(features, sites, families, file):
     """This is a helper function to export features as a csv file
     Args:
@@ -348,87 +331,6 @@ def write_languages_to_csv(features, sites, families, file):
             else:
                 fam = "family_" + str(fam[0])
             writer.writerow([name] + [x] + [y] + [fam] + f)
-
-
-def write_feature_occurrence_to_csv(occurrence, categories, file):
-    """This is a helper function to export the occurrence of features in families or globally to a csv
-    Args:
-        occurrence: the occurrence of each feature, either as a relative frequency or counts
-        categories: the possible categories per feature
-        file(str): output csv file
-    """
-
-    with open(file, mode='w', encoding='utf-8') as csv_file:
-        features = list(range(occurrence.shape[0]))
-        feature_names = ['f' + str(f) for f in features]
-        cats = list(range(occurrence.shape[1]))
-        cat_names = ['cat' + str(c) for c in cats]
-        csv_names = ["feature"] + cat_names
-        writer = csv.writer(csv_file)
-        writer.writerow(csv_names)
-
-        for f in range(len(feature_names)):
-            # feature name
-            f_name = feature_names[f]
-            # frequencies
-            p = occurrence[f, :].tolist()
-            idx = categories[f]
-            for i in range(len(p)):
-                if i not in idx:
-                    p[i] = ""
-            writer.writerow([f_name] + p)
-
-
-def read_feature_occurrence_from_csv(file, feature_states_file):
-    """This is a helper function to import the occurrence of features in families (or globally) from a csv
-        Args:
-            file(str): path to the csv file containing feature-state counts
-            feature_states_file (str): path to csv file containing features and states
-
-        Returns:
-            np.array :
-            The occurrence of each feature, either as relative frequencies or counts, together with feature
-            and category names
-    """
-
-    # Load data and feature states
-    counts_raw = pd.read_csv(file, index_col='feature')
-    feature_states = pd.read_csv(feature_states_file, dtype=str)
-    n_states, n_features = feature_states.shape
-
-    # Check that features match
-    assert set(counts_raw.index) == set(feature_states.columns)
-
-    # Replace NAs by 0.
-    counts_raw[counts_raw.isna()] = 0.
-
-    # Collect feature and state names
-    feature_names = {'external': feature_states.columns.to_list(),
-                     'internal': list(range(n_features))}
-    state_names = {'external': [[] for _ in range(n_features)],
-                   'internal': [[] for _ in range(n_features)]}
-
-    # Align state columns with feature_states file
-    counts = np.zeros((n_features, n_states))
-    for f_idx in range(n_features):
-        f_name = feature_states.columns[f_idx]         # Feature order is given by ´feature_states_file´
-        for s_idx in range(n_states):
-            s_name = feature_states[f_name][s_idx]     # States order is given by ´feature_states_file´
-            if pd.isnull(s_name):                      # ...same for applicable states per feature
-                continue
-
-            counts[f_idx, s_idx] = counts_raw.loc[f_name, s_name]
-
-            state_names['external'][f_idx].append(s_name)
-            state_names['internal'][f_idx].append(s_idx)
-
-    # # Sanity check
-    # Are the data count data?
-    if not all(float(y).is_integer() for y in np.nditer(counts)):
-        out = f"The data in {file} must be count data."
-        raise ValueError(out)
-
-    return counts.astype(int), feature_names, state_names
 
 
 def touch(fname):
@@ -480,88 +382,6 @@ def normalize(x, axis=-1):
     """
     assert np.all(np.sum(x, axis=axis) > 0)
     return x / np.sum(x, axis=axis, keepdims=True)
-
-
-def mle_weights(samples):
-    """Compute the maximum likelihood estimate for categorical samples.
-
-    Args:
-        samples (np.array):
-    Returns:
-        np.array: the MLE for the probability vector in the categorical distribution.
-    """
-    counts = np.sum(samples, axis=0)
-    return normalize(counts)
-
-
-def log_binom(
-    n: int | NDArray[int],
-    k: int | NDArray[int]
-) -> float | NDArray[float]:
-    """Compute the logarithm of (n choose k), i.e. the binomial coefficient of `n` and `k`.
-
-    Args:
-        n: Population size.
-        k: Sample size.
-    Returns:
-        double: log(n choose k)
-
-    == Usage ===
-    >>> log_binom(10, np.arange(3))
-    array([0.        , 2.30258509, 3.80666249])
-    >>> log_binom(np.arange(1, 4), 1)
-    array([0.        , 0.69314718, 1.09861229])
-    """
-    return -betaln(1 + n - k, 1 + k) - np.log(n + 1)
-
-
-def log_multinom(n: int, ks: Sequence[int]) -> float:
-    """Compute the logarithm of (n choose k1,k2,...), i.e. the multinomial coefficient of
-    `n` and the integers in the list `ks`. The sum of the sample sizes (the numbers in
-     `ks`) may not exceed the population size (`n`).
-
-    Args:
-        n: Population size.
-        ks: Sample sizes
-
-    Returns:
-        The log multinomial coefficient: log(n choose k1,k2,...)
-
-    == Usage ===
-    >>> log_multinom(5, [1,1,1,1])  # == log(5!)
-    4.787491742782046
-    >>> log_multinom(13, [4])  # == log_binom(13, 4)
-    6.572282542694008
-    >>> log_multinom(13, [3, 2])  # == log_binom(13, 3) + log_binom(10, 2)
-    9.462654300590172
-    """
-    ks = np.asarray(ks)
-    # assert np.all(ks >= 0)
-    # assert np.sum(ks) <= n
-
-    # Simple special case
-    if np.sum(ks) == 0:
-        return 0.
-
-    # Filter out 0-samples
-    ks = ks[ks > 0]
-
-    log_i = np.log(1 + np.arange(n))
-    log_i_cumsum = np.cumsum(log_i)
-
-    # Count all permutations of the total population
-    m = np.sum(log_i)
-
-    # Subtract all permutation within the samples (with sample sizes specified in `ks`).
-    m -= np.sum(log_i_cumsum[ks-1])
-
-    # If there are is a remainder in the population, that was not assigned to any of the
-    # samples, subtract all permutations of the remainder population.
-    rest = n - np.sum(ks)
-    if rest > 0:
-        m -= log_i_cumsum[rest-1]
-
-    return m
 
 
 def decompose_config_path(config_path: PathLike) -> (Path, Path):
@@ -631,202 +451,6 @@ def get_best_permutation(
     return linear_sum_assignment(cluster_agreement_matrix, maximize=True)[1]
 
 
-if scipy.__version__ >= '1.8.0':
-    log_expit = scipy.special.log_expit
-else:
-    def log_expit(*args, **kwargs):
-        return np.log(expit(*args, **kwargs))
-
-
-def set_defaults(cfg: dict, default_cfg: dict):
-    """Iterate through a recursive config dictionary and set all fields that are not
-    present in cfg to the default values from default_cfg.
-
-    == Usage ===
-    >>> set_defaults(cfg={0:0, 1:{1:0}, 2:{2:1}},
-    ...              default_cfg={1:{1:1}, 2:{1:1, 2:2}})
-    {0: 0, 1: {1: 0}, 2: {2: 1, 1: 1}}
-    >>> set_defaults(cfg={0:0, 1:1, 2:2},
-    ...              default_cfg={1:{1:1}, 2:{1:1, 2:2}})
-    {0: 0, 1: 1, 2: 2}
-    """
-    for key in default_cfg:
-        if key not in cfg:
-            # Field ´key´ is not defined in cfg -> use default
-            cfg[key] = default_cfg[key]
-
-        else:
-            # Field ´key´ is defined in cfg
-            # -> update recursively if the field is a dictionary
-            if isinstance(default_cfg[key], dict) and isinstance(cfg[key], dict):
-                set_defaults(cfg[key], default_cfg[key])
-
-    return cfg
-
-
-def update_recursive(cfg: dict, new_cfg: dict):
-    """Iterate through a recursive config dictionary and update cfg in all fields that are specified in new_cfg.
-
-    == Usage ===
-    >>> update_recursive(cfg={0:0, 1:{1:0}, 2:{2:1}},
-    ...                  new_cfg={1:{1:1}, 2:{1:1, 2:2}})
-    {0: 0, 1: {1: 1}, 2: {2: 2, 1: 1}}
-    >>> update_recursive(cfg={0:0, 1:1, 2:2},
-    ...                  new_cfg={1:{1:1}, 2:{1:1, 2:2}})
-    {0: 0, 1: {1: 1}, 2: {1: 1, 2: 2}}
-    """
-    for key in new_cfg:
-        if (key in cfg) and isinstance(new_cfg[key], dict) and isinstance(cfg[key], dict):
-            # Both dictionaries have another layer -> update recursively
-            update_recursive(cfg[key], new_cfg[key])
-        else:
-            cfg[key] = new_cfg[key]
-
-    return cfg
-
-
-def iter_items_recursive(cfg: dict, loc=tuple()):
-    """Recursively iterate through all key-value pairs in ´cfg´ and sub-dictionaries.
-
-    Args:
-        cfg (dict): Config dictionary, potentially containing sub-dictionaries.
-        loc (tuple): Specifies the sequene of keys that lead to the current sub-dictionary.
-    Yields:
-        tuple: key-value pairs of the bottom level dictionaries
-
-    == Usage ===
-    >>> list(iter_items_recursive({0: 0, 1: {1: 0}, 2: {2: 1, 1: 1}}))
-    [(0, 0, ()), (1, 0, (1,)), (2, 1, (2,)), (1, 1, (2,))]
-    """
-    for key, value in cfg.items():
-        if isinstance(value, dict):
-            yield from iter_items_recursive(value, loc + (key, ))
-        else:
-            yield key, value, loc
-
-
-def categorical_log_probability(x: NDArray[bool], p: NDArray[float]) -> NDArray[float]:
-    """Compute the log-probability of observations `x` under categorical distribution `p`.
-
-    Args:
-        x: observations in one-hot encoding. Each column (on last axis) contains exactly one 1.
-            shape: (*distr_shape, n_categories)
-        p: probability of each state in each dimension of the distribution. Last axis is
-                normalised to one.
-            shape: (*distr_shape, n_categories)
-
-    Returns:
-        The log-probability for each observation elementwise.
-            shape: distr_shape
-
-    """
-    return np.log(np.sum(x*p, axis=-1))
-
-
-def dirichlet_multinomial_logpdf(
-    counts: NDArray[int],        # shape: (n_features, n_states)
-    a: NDArray[float],      # shape: (n_features, n_states)
-) -> NDArray[float]:        # shape: (n_features)
-    """Calculate log-probability of DirichletMultinomial distribution for given Dirichlet
-    concentration parameter `a` and multinomial observations ´counts´.
-
-    Dirichlet-multinomial distribution:
-        https://en.wikipedia.org/wiki/Dirichlet-multinomial_distribution
-    Reference implementation (pymc3):
-        https://github.com/pymc-devs/pymc/blob/main/pymc/distributions/multivariate.py
-
-    == Usage ===
-    >>> dirichlet_multinomial_logpdf(counts=np.array([2, 1, 0, 0]), a=np.array([1., 1., 0., 0.]))
-    -1.386294361303224
-    """
-    # Only apply to
-    # valid = a > 0
-    # counts = counts[valid]
-    # a = a[valid]
-    a = a + 1e-12      # TODO Find a better way to fix 0s in a (and still use broadcasting)
-
-    n = counts.sum(axis=-1)
-    sum_a = a.sum(axis=-1)
-    const = (gammaln(n + 1) + gammaln(sum_a)) - gammaln(n + sum_a)
-    series = gammaln(counts + a) - (gammaln(counts + 1) + gammaln(a))
-    return const + series.sum(axis=-1)
-
-
-def dirichlet_categorical_logpdf(
-    counts: NDArray[int],   # shape: (n_features, n_states)
-    a: NDArray[float],      # shape: (n_features, n_states)
-) -> NDArray[float]:        # shape: (n_features)
-    """Calculate log-probability of DirichletMultinomial distribution for given Dirichlet
-    concentration parameter `a` and multinomial observations ´counts´.
-
-    Dirichlet-multinomial distribution:
-        https://en.wikipedia.org/wiki/Dirichlet-multinomial_distribution
-    Reference implementation (pymc3):
-        https://github.com/pymc-devs/pymc/blob/main/pymc/distributions/multivariate.py
-
-    == Usage ===
-    >>> dirichlet_multinomial_logpdf(counts=np.array([2, 1, 0, 0]), a=np.array([1., 1., 0., 0.]))
-    -1.386294361303224
-    """
-    a = a + 1e-12  # TODO Find a better way to fix 0s in a (and still use broadcasting)
-
-    n = counts.sum(axis=-1)
-    sum_a = a.sum(axis=-1)
-    const = gammaln(sum_a) - gammaln(n + sum_a)
-    series = gammaln(counts + a) - gammaln(a)
-    return const + series.sum(axis=-1)
-
-
-def get_along_axis(a: NDArray, index: int, axis: int):
-    """Get the index-th entry in the axis-th dimension of array a.
-    Examples:
-        >>> get_along_axis(a=np.arange(6).reshape((2,3)), index=2, axis=1)
-        array([2, 5])
-    """
-    I = [slice(None)] * a.ndim
-    I[axis] = index
-    return a[tuple(I)]
-
-
-def pmf_categorical_with_replacement(idxs: list[int], p: NDArray[float]):
-    prob = 0
-    for idxs_perm in map(list, permutations(idxs)):
-        prob += np.prod(p[idxs_perm]) / np.prod(1-np.cumsum(p[idxs_perm][:-1]))
-    return prob
-
-
-def read_geo_cost_matrix(object_names: Sequence[str], file: PathLike, logger=None) -> NDArray[float]:
-    """ This is a helper function to import the geographical cost matrix.
-
-    Args:
-        object_names: the names of the objects or languages (external and internal)
-        file: path to the file location
-
-    Returns:
-        The symmetric cost matrix between objects.
-    """
-    costs = read_costs_from_csv(file, logger=logger)
-    assert set(costs.columns) == set(object_names)
-
-    # Sort the data by object names
-    sorted_costs = costs.loc[object_names, object_names]
-
-    cost_matrix = np.asarray(sorted_costs).astype(float)
-
-    # Check if matrix is symmetric, if not make symmetric
-    if not np.allclose(cost_matrix, cost_matrix.T):
-        cost_matrix = (cost_matrix + cost_matrix.T)/2
-        if logger:
-            logger.info("The cost matrix is not symmetric. It was made symmetric by "
-                        "averaging the original costs in the upper and lower triangle.")
-    return cost_matrix
-
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
-
-
 def min_and_max_with_padding(x, pad=0.05):
     lower = np.min(x)
     upper = np.max(x)
@@ -840,3 +464,8 @@ def reproject_locations(locations, data_proj, map_proj):
     loc = gpd.GeoDataFrame(geometry=gpd.points_from_xy(*locations.T), crs=data_proj)
     loc_re = loc.to_crs(map_proj).geometry
     return np.array([loc_re.x, loc_re.y]).T
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

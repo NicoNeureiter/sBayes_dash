@@ -17,8 +17,7 @@ import pandas as pd
 import numpy as np
 from numpy.typing import NDArray
 
-from sbayes.util import ComputeNetwork, read_geo_cost_matrix
-from sbayes.util import PathLike, read_data_csv, encode_states
+from sbayes_dash.util import PathLike, read_data_csv, encode_states
 
 # Type variables and constants
 S = TypeVar('S')  # Self type

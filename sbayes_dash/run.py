@@ -15,9 +15,9 @@ import pandas as pd
 from matplotlib import colors as mpl_colors
 from numpy.typing import NDArray
 
-from sbayes.load_data import Confounder, Objects
-from sbayes.util import compute_delaunay, gabriel_graph_from_delaunay, parse_cluster_columns
-from sbayes.util import min_and_max_with_padding, read_data_csv, reproject_locations
+from sbayes_dash.load_data import Confounder, Objects
+from sbayes_dash.util import compute_delaunay, gabriel_graph_from_delaunay, parse_cluster_columns
+from sbayes_dash.util import min_and_max_with_padding, read_data_csv, reproject_locations
 
 
 # data_projection: str = "+proj=eqdc +lat_0=-32 +lon_0=-60 +lat_1=-5 +lat_2=-42 +x_0=0 +y_0=0 +ellps=aust_SA +units=m +no_defs "
@@ -38,11 +38,12 @@ def parse_content(content: str):
 
 
 def parse_clusters_samples(clusters_samples: str) -> NDArray[bool]:  # shape: (n_clusters, n_samples, n_sites)
-    return np.array([
-        parse_cluster_columns(line)
+    samples_list = [
+        [list(c) for c in line.split('\t')]
         for line in clusters_samples.split("\n")
         if line.strip()
-    ]).transpose((1, 0, 2))
+    ]
+    return np.array(samples_list, dtype=int).astype(bool).transpose((1, 0, 2))
 
 
 def cluster_to_graph(locations):
@@ -103,7 +104,7 @@ class AppState:
 
 
 # Initialized app
-app = JupyterDash(__name__)
+app = JupyterDash(__name__, suppress_callback_exceptions=True)
 server = app.server
 state = AppState()
 
@@ -240,7 +241,7 @@ def update_clusters(content, filename):
     return html.Div([
         html.P(id="sample", children="Sample number"),
         dcc.Slider(id="i_sample", value=0, step=1, min=0, max=state.n_samples-1,
-                   marks={i:i for i in range(0, state.n_samples, max(1, state.n_samples//10))}),
+                   marks={i: str(i) for i in range(0, state.n_samples, max(1, state.n_samples//10))}),
         dcc.Graph(id="map"),
     ])
 
@@ -263,5 +264,9 @@ def update_map(i_sample: int):
     return state.fig
 
 
-if __name__ == '__main__':
+def main():
     app.run_server(debug=True)
+
+    
+if __name__ == '__main__':
+    main()
