@@ -1,3 +1,4 @@
+urllib3==1.26.14
 dash==2.10.2
 geopandas==0.12.2
 jupyter_dash==0.4.2
