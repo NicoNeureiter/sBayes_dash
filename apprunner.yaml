@@ -1,11 +1,11 @@
 version: 1.0
-runtime: python3.10
+runtime: python3
 build:
   commands:
     build:
       - pip install -r requirements.txt
 run: 
-  runtime-version: 3.10
+  runtime-version: 3.8
   command: gunicorn sbayes_dash.run:main
   network: 
     port: 8050
