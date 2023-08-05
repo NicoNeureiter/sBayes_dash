@@ -1,1 +1,1 @@
-web: gunicorn interactive_maps:server
+web: gunicorn sbayes_dash.run:main
