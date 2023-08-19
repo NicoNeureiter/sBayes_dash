@@ -9,6 +9,8 @@ from pathlib import Path
 
 from jupyter_dash import JupyterDash
 from dash import Input, Output, html, dcc, State
+from dash_extensions.enrich import Output, DashProxy, Input, MultiplexerTransform
+import dash_daq as daq
 from plotly import express as px, graph_objects as go
 import numpy as np
 import pandas as pd
@@ -47,6 +49,8 @@ def parse_clusters_samples(clusters_samples: str) -> NDArray[bool]:  # shape: (n
 
 
 def cluster_to_graph(locations):
+    if len(locations) < 2:
+        return [], []
     delaunay = compute_delaunay(locations)
     graph_connections = gabriel_graph_from_delaunay(delaunay, locations)
 
@@ -69,6 +73,12 @@ class AppState:
     locations = None
     object_data = None
     objects = None
+    i_sample = 0
+    burnin = 0
+
+    slider = None
+
+
 
     @property
     def clusters(self):
@@ -104,15 +114,16 @@ class AppState:
 
 
 # Initialized app
-app = JupyterDash(__name__, suppress_callback_exceptions=True)
+app = DashProxy(prevent_initial_callbacks=True, transforms=[MultiplexerTransform()], suppress_callback_exceptions=True)
+# app = JupyterDash(__name__, suppress_callback_exceptions=True)
 server = app.server
 state = AppState()
 
 
 upload_box_style = {
-    "width": "100%",
-    "height": "60px",
-    "lineHeight": "60px",
+    "width": "98%",
+    "height": "40px",
+    "lineHeight": "40px",
     "borderWidth": "1px",
     "borderStyle": "dashed",
     "borderRadius": "5px",
@@ -123,20 +134,32 @@ upload_box_style = {
 # Set up the layout
 app.layout = html.Div(
     children=[
-        dcc.Upload(
+        html.Div([dcc.Upload(
             id='upload-data',
             children=html.Div([
                 'Drag and drop or select the ', html.B('data file')
             ]),
             style=upload_box_style,
-        ),
-        html.Div(id='uploaded-data'),
+            disabled=False,
+            style_disabled={"opacity": 0.3},
+        )], style={"width": "50%", "display": "inline-block"}),
+        html.Div([dcc.Upload(
+            id='upload-clusters',
+            children=html.Div([
+                'Drag and drop or select the ', html.B('clusters file')
+            ]),
+            style=upload_box_style,
+            disabled=True,
+            style_disabled={"opacity": 0.3},
+        )], style={"width": "50%", "display": "inline-block"},),
+        html.Div(id='uploaded-clusters')
     ]
 )
 
 
 @app.callback(
-    Output('uploaded-data', 'children'),
+    Output('upload-data', 'disabled'),
+    Output('upload-clusters', 'disabled'),
     Input('upload-data', 'contents'),
 )
 def update_data(content):
@@ -168,20 +191,12 @@ def update_data(content):
         "family": family_names[family_ids],
     })
 
-    return html.Div([
-        dcc.Upload(
-            id='upload-clusters',
-            children=html.Div([
-                'Drag and drop or select the ', html.B('clusters file')
-            ]),
-            style=upload_box_style,
-        ),
-        html.Div(id='uploaded-clusters'),
-    ])
+    return True, False
 
 
 @app.callback(
     Output('uploaded-clusters', 'children'),
+    Output('upload-clusters', 'disabled'),
     Input('upload-clusters', 'contents'),
     Input('upload-clusters', 'filename'),
 )
@@ -238,22 +253,28 @@ def update_clusters(content, filename):
     #
     # fig.update_layout(showlegend=True)
 
-    return html.Div([
-        html.P(id="sample", children="Sample number"),
-        dcc.Slider(id="i_sample", value=0, step=1, min=0, max=state.n_samples-1,
-                   marks={i: str(i) for i in range(0, state.n_samples, max(1, state.n_samples//10))}),
+    state.slider = dcc.Slider(
+        id="i_sample", value=0, step=1, min=0, max=state.n_samples-1,
+        marks={i: str(i) for i in range(0, state.n_samples, max(1, state.n_samples//10))},
+    )
+
+    results_components = html.Div([
+        html.Div(
+    [
+                html.P(id="sample", children="Sample number"),
+                state.slider,
+            ],
+            style={"width": "90%", "display": "inline-block"},
+        ),
+        html.Div([daq.BooleanSwitch(id="summarize_switch", label="Summarize samples", labelPosition="top")],
+                 style={"width": "9%", "display": "inline-block"}),
         dcc.Graph(id="map"),
     ])
 
+    return results_components, True
 
-@app.callback(
-    Output("map", "figure"),
-    Input("i_sample", "value"),
-)
-def update_map(i_sample: int):
-    if state.clusters_path is None:
-        return None
 
+def plot_sample_map(i_sample: int):
     colors = np.full(state.objects.n_objects, "lightgrey", dtype=object)
     for i, c in enumerate(state.clusters[:, i_sample, :]):
         state.lines[i].lon, state.lines[i].lat = cluster_to_graph(state.locations[c])
@@ -262,6 +283,42 @@ def update_map(i_sample: int):
 
     state.scatter.marker.color = list(colors)
     return state.fig
+
+
+def plot_summary_map():
+    colors = np.full(state.objects.n_objects, "lightgrey", dtype=object)
+    summary_clusters = np.mean(state.clusters[:, state.burnin:, :], axis=1) > 0.5
+    for i, c in enumerate(summary_clusters):
+        state.lines[i].lon, state.lines[i].lat = cluster_to_graph(state.locations[c])
+        colors[c] = state.cluster_colors[i]
+        state.lines[i].line.color = state.cluster_colors[i]
+
+    state.scatter.marker.color = list(colors)
+    return state.fig
+
+
+@app.callback(
+    Output("map", "figure"),
+    Input("i_sample", "value"),
+)
+def update_map(i_sample: int):
+    if state.clusters is None:
+        return None
+
+    state.i_sample = i_sample
+    return plot_sample_map(i_sample=i_sample)
+
+
+@app.callback(
+    Output("map", "figure"),
+    Output("i_sample", "disabled"),
+    Input("summarize_switch", "on"),
+)
+def switch_summarization(summarize: bool):
+    if summarize:
+        return plot_summary_map(), True
+    else:
+        return plot_sample_map(i_sample=state.i_sample), False
 
 
 def main():
