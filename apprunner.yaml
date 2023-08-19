@@ -6,6 +6,6 @@ build:
       - pip install -r requirements.txt
 run: 
   runtime-version: 3.8
-  command: gunicorn sbayes_dash.run:main
+  command: gunicorn sbayes_dash.run:server
   network: 
     port: 8050
