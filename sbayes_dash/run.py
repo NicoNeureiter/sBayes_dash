@@ -129,15 +129,17 @@ upload_box_style = {
     "borderRadius": "5px",
     "textAlign": "center",
     "margin": "10px",
+    "font-variant": "small-caps",
 }
 
 # Set up the layout
 app.layout = html.Div(
     children=[
+        # html.Img(src='assets/sbayes_logo.png', style={"width": "10%"}),
         html.Div([dcc.Upload(
             id='upload-data',
             children=html.Div([
-                'Drag and drop or select the ', html.B('data file')
+                'drag and drop or select the ', html.B('data file'), ' (.csv)'
             ]),
             style=upload_box_style,
             disabled=False,
@@ -146,14 +148,14 @@ app.layout = html.Div(
         html.Div([dcc.Upload(
             id='upload-clusters',
             children=html.Div([
-                'Drag and drop or select the ', html.B('clusters file')
+                'drag and drop or select the ', html.B('clusters file'), ' (clusters_*.txt)'
             ]),
             style=upload_box_style,
             disabled=True,
             style_disabled={"opacity": 0.3},
         )], style={"width": "50%", "display": "inline-block"},),
         html.Div(id='uploaded-clusters')
-    ]
+    ], style={"font-family": "sans-serif"}
 )
 
 
@@ -189,6 +191,7 @@ def update_data(content):
         "y": locations[:, 1],
         "name": objects.names,
         "family": family_names[family_ids],
+        "posterior_support": np.zeros(len(locations))
     })
 
     return True, False
@@ -212,7 +215,7 @@ def update_clusters(content, filename):
     fig = px.scatter_geo(
         state.object_data,
         lat="y", lon="x",
-        hover_data=["name", "family"],
+        hover_data=["name", "family", "posterior_support"],
         projection="natural earth",
     )
 
@@ -261,13 +264,15 @@ def update_clusters(content, filename):
     results_components = html.Div([
         html.Div(
     [
-                html.P(id="sample", children="Sample number"),
+                html.P(id="sample", children="Sample number", style={"font-size": 14, "text-indent": "10px"}),
                 state.slider,
             ],
             style={"width": "90%", "display": "inline-block"},
         ),
-        html.Div([daq.BooleanSwitch(id="summarize_switch", label="Summarize samples", labelPosition="top")],
-                 style={"width": "9%", "display": "inline-block"}),
+        html.Div([
+            daq.BooleanSwitch(id="summarize_switch", label={"label": "Summarize samples", "style": {"font-size": 14}},
+                              labelPosition="top")
+        ], style={"width": "9%", "display": "inline-block"}),
         dcc.Graph(id="map"),
     ])
 
@@ -280,18 +285,24 @@ def plot_sample_map(i_sample: int):
         state.lines[i].lon, state.lines[i].lat = cluster_to_graph(state.locations[c])
         colors[c] = state.cluster_colors[i]
         state.lines[i].line.color = state.cluster_colors[i]
-
+    state.scatter.hovertemplate = "y=%{lat}<br>x=%{lon}<br>name=%{customdata[0]}<br>family=%{customdata[1]}"
     state.scatter.marker.color = list(colors)
     return state.fig
 
 
 def plot_summary_map():
     colors = np.full(state.objects.n_objects, "lightgrey", dtype=object)
-    summary_clusters = np.mean(state.clusters[:, state.burnin:, :], axis=1) > 0.5
+    cluster_posterior = np.mean(state.clusters[:, state.burnin:, :], axis=1)
+    summary_clusters = (cluster_posterior > 0.5)
+    state.object_data.posterior_support = 1 - np.sum(cluster_posterior, axis=0)
+
     for i, c in enumerate(summary_clusters):
         state.lines[i].lon, state.lines[i].lat = cluster_to_graph(state.locations[c])
         colors[c] = state.cluster_colors[i]
         state.lines[i].line.color = state.cluster_colors[i]
+        state.scatter.customdata[c,2] = cluster_posterior[i, c]
+    state.scatter.hovertemplate = "y=%{lat}<br>x=%{lon}<br>name=%{customdata[0]}<br>family=%{customdata[1]}<br>posterior_support=%{customdata[2]:.2f}"
+
 
     state.scatter.marker.color = list(colors)
     return state.fig
