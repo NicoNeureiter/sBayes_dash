@@ -160,11 +160,13 @@ app.layout = html.Div(
 
 
 @app.callback(
-    Output('upload-data', 'disabled'),
+#    Output('upload-data', 'disabled'),
     Output('upload-clusters', 'disabled'),
+    Output('upload-data', 'children'),
     Input('upload-data', 'contents'),
+    Input('upload-data', 'filename'),
 )
-def update_data(content):
+def update_data(content, filename):
     if content is None:
         return
 
@@ -194,12 +196,14 @@ def update_data(content):
         "posterior_support": np.zeros(len(locations))
     })
 
-    return True, False
+    # return True, False, html.Div([filename])
+    return False, html.Div([filename])  
 
 
 @app.callback(
     Output('uploaded-clusters', 'children'),
-    Output('upload-clusters', 'disabled'),
+    Output('upload-clusters', 'children'),
+#    Output('upload-clusters', 'disabled'),
     Input('upload-clusters', 'contents'),
     Input('upload-clusters', 'filename'),
 )
@@ -276,7 +280,7 @@ def update_clusters(content, filename):
         dcc.Graph(id="map"),
     ])
 
-    return results_components, True
+    return results_components, html.Div([filename]) #, True
 
 
 def plot_sample_map(i_sample: int):
