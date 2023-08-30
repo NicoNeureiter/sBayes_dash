@@ -7,8 +7,9 @@ import base64
 from dataclasses import dataclass
 from pathlib import Path
 
-from jupyter_dash import JupyterDash
-from dash import Input, Output, html, dcc, State
+# from jupyter_dash import JupyterDash
+# from dash import Input, Output, State
+from dash import html, dcc
 from dash_extensions.enrich import Output, DashProxy, Input, MultiplexerTransform
 import dash_daq as daq
 from plotly import express as px, graph_objects as go
