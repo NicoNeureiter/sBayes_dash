@@ -466,6 +466,11 @@ def reproject_locations(locations, data_proj, map_proj):
     return np.array([loc_re.x, loc_re.y]).T
 
 
+COLOR_0 = "rgba(150, 150, 150, 0.4)"
+COLOR_1 = "#990055"
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
+
