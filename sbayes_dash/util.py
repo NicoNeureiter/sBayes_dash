@@ -5,6 +5,9 @@ import io
 import time
 import csv
 import os
+import sys
+import traceback
+import warnings
 from pathlib import Path
 from math import sqrt
 from itertools import permutations
@@ -23,6 +26,8 @@ from unidecode import unidecode
 
 
 EPS = np.finfo(float).eps
+COLOR_0 = "rgba(150, 150, 150, 0.4)"
+COLOR_1 = "#990055"
 
 
 PathLike = Union[str, Path]
@@ -295,7 +300,7 @@ def read_data_csv(csv_path: PathLike | io.StringIO) -> pd.DataFrame:
     na_values = ["", " ", "\t", "  "]
     data: pd.DataFrame = pd.read_csv(csv_path, na_values=na_values, keep_default_na=False, dtype=str)
     data.columns = [unidecode(c) for c in data.columns]
-    return data.applymap(normalize_str)
+    return data.map(normalize_str)
 
 
 def write_languages_to_csv(features, sites, families, file):
@@ -466,8 +471,17 @@ def reproject_locations(locations, data_proj, map_proj):
     return np.array([loc_re.x, loc_re.y]).T
 
 
-COLOR_0 = "rgba(150, 150, 150, 0.4)"
-COLOR_1 = "#990055"
+def warn_with_traceback(message, category, filename, lineno, file=None, line=None):
+    log = file if hasattr(file, 'write') else sys.stderr
+    # traceback.print_stack(file=log)
+    warning_trace = traceback.format_stack()
+    warning_trace_str = "".join(["\n\t|" + l for l in "".join(warning_trace).split("\n")])
+    message = str(message) + warning_trace_str
+    log.write(warnings.formatwarning(message, category, filename, lineno, line))
+
+
+def activate_verbose_warnings():
+    warnings.showwarning = warn_with_traceback
 
 
 if __name__ == "__main__":

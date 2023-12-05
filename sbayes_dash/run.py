@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dash._utils import AttributeDict
 import os;os.environ['USE_PYGEOS'] = '0'  # Fix for Pandas deprecation warning
 
 from dash import dcc, no_update
 from dash.html import Figure
+from dash._callback_context import context_value
 
 from io import StringIO
 import base64
@@ -21,7 +23,7 @@ from numpy.typing import NDArray
 from sbayes_dash.app_state import AppState
 from sbayes_dash import dash_components as components
 from sbayes_dash.load_data import Confounder, Objects
-from sbayes_dash.util import read_data_csv, reproject_locations, COLOR_0, COLOR_1
+from sbayes_dash.util import read_data_csv, reproject_locations, COLOR_0, COLOR_1, activate_verbose_warnings
 from sbayes_dash.plotting import plot_summary_map, plot_sample_map, create_data_figure
 
 # data_projection: str = "+proj=eqdc +lat_0=-32 +lon_0=-60 +lat_1=-5 +lat_2=-42 +x_0=0 +y_0=0 +ellps=aust_SA +units=m +no_defs "
@@ -57,7 +59,7 @@ def parse_clusters_samples(clusters_samples: str) -> NDArray[bool]:  # shape: (n
 
 # Initialized app
 # app = DashProxy(prevent_initial_callbacks='initial_duplicate', transforms=[MultiplexerTransform()], suppress_callback_exceptions=True)
-app = DashProxy(prevent_initial_callbacks=True, transforms=[MultiplexerTransform()], suppress_callback_exceptions=True)
+app = DashProxy(prevent_initial_callbacks=False, transforms=[MultiplexerTransform()], suppress_callback_exceptions=True)
 # app = JupyterDash(__name__, suppress_callback_exceptions=True)
 server = app.server
 state = AppState()
@@ -73,11 +75,15 @@ state = AppState()
 )
 def update_data(content, filename):
     if content is None:
-        return
+        if state.data is None:
+            return
+        else:
+            return components.build_tabs(state), False, html.Div([state.data_filename])
 
     # Load data
     data_str = parse_content(content)
     data_file = StringIO(data_str)
+    state.data_filename = filename
     state.data = data = read_data_csv(data_file)
     state.objects = objects = Objects.from_dataframe(data)
     state.families = families = Confounder.from_dataframe(data, confounder_name="family")
@@ -116,6 +122,7 @@ def update_data(content, filename):
     Output('upload-clusters', 'children'),
     Input('upload-clusters', 'contents'),
     Input('upload-clusters', 'filename'),
+    prevent_initial_call=True
 )
 def update_clusters(content, filename):
     if content is None:
@@ -132,6 +139,7 @@ def update_clusters(content, filename):
 @app.callback(
     Output("data_map", "figure"),
     Input("family-sizes", "hoverData"),
+    prevent_initial_call=True
 )
 def hover_family(hover_data: dict):
     family = hover_data["points"][0]["x"]
@@ -145,6 +153,7 @@ def hover_family(hover_data: dict):
 @app.callback(
     Output('data_map', 'figure'),
     Input('feature-selector', 'value'),
+    prevent_initial_call=True
 )
 def select_feature(feature: str):
     # Which states can this feature take
@@ -165,6 +174,7 @@ def select_feature(feature: str):
 @app.callback(
     Output("map", "figure"),
     Input("i_sample", "value"),
+    prevent_initial_call=True
 )
 def update_sample_map(i_sample: int):
     if state.clusters is None:
@@ -178,7 +188,8 @@ def update_sample_map(i_sample: int):
     Output("map", "figure"),
     Output("i_sample", "value"),
     Input("trace", "hoverData"),
-    State("summarize_switch", "on")
+    State("summarize_switch", "on"),
+    prevent_initial_call=True
 )
 def hover_tracer(hover_data: dict, summarize: bool):
     cluster = hover_data["points"][0]["curveNumber"]
@@ -195,6 +206,7 @@ def hover_tracer(hover_data: dict, summarize: bool):
 @app.callback(
     Output("map", "figure"),
     Input("sample_range", "value"),
+    prevent_initial_call=True
 )
 def update_summary_map(sample_range: list[int]):
     if state.clusters is None:
@@ -209,6 +221,7 @@ def update_summary_map(sample_range: list[int]):
     Output("slider_div", "style"),
     Output("range_slider_div", "style"),
     Input("summarize_switch", "on"),
+    prevent_initial_call=True
 )
 def switch_summarization(summarize: bool) -> (Figure, dcc.Slider):
     state.highlighted_cluster = None
@@ -229,7 +242,7 @@ def switch_summarization(summarize: bool) -> (Figure, dcc.Slider):
 @app.callback(
     Output("download-map", "data"),
     Input("download-map-button", "n_clicks"),
-    prevent_initial_call=True,
+    prevent_initial_call=True
 )
 def download_figure(n_clicks):
     map_html = state.serialize_results_map(filename="sBayes_map.html")
@@ -237,12 +250,11 @@ def download_figure(n_clicks):
 
 
 def main(port=8050, data_path: Path = None):
-    # if data_path:
-    #     data_path = Path(data_path)
-    #     with open(data_path, 'rb') as data_str:
-    #         data_encoded = encode_content(data_str.read())
-    #         # print(data_encoded)
-    #         update_data(data_encoded, data_path.name)
+    if data_path:
+        data_path = Path(data_path)
+        with open(data_path, 'rb') as data_str:
+            data_encoded = encode_content(data_str.read())
+            update_data(data_encoded, data_path.name)
 
     # Set up the layout
     app.layout = components.get_base_layout()
@@ -258,8 +270,7 @@ if __name__ == '__main__':
                         help="Path to the data file")
     cli_args = parser.parse_args()
 
-    # if cli_args.data:
-    #     asyncio.run(main(port=cli_args.port, data_path=cli_args.data))
-    #     print(cli_args.data)
-    # else:
+    if __debug__:
+        activate_verbose_warnings()
+
     main(port=cli_args.port, data_path=cli_args.data)

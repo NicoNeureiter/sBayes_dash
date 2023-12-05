@@ -102,7 +102,7 @@ def create_data_figure(state: AppState):
 
 def plot_trace(state: AppState):
     interval = 2
-    sizes_np = np.mean(state.clusters[:, ::interval, :], axis=2)
+    sizes_np = np.sum(state.clusters[:, ::interval, :], axis=2)
     sizes_df = pd.DataFrame(
         [(i, interval*j, s) for (i, j), s in np.ndenumerate(sizes_np)],
         columns=["cluster", "sample", "size"]
@@ -129,8 +129,8 @@ def plot_summary_map(state: AppState, sample_range: list[int], posterior_thresho
     state.object_data.posterior_support = 1 - np.sum(cluster_posterior, axis=0)
 
     any_cluster = np.any(summary_clusters, axis=0)
-    state.object_data["cluster"][any_cluster] = np.nonzero(summary_clusters.T)[1]
-    state.object_data["cluster"][~any_cluster] = -1
+    state.object_data.loc[any_cluster, "cluster"] = np.nonzero(summary_clusters.T)[1]
+    state.object_data.loc[~any_cluster, "cluster"] = -1
 
     for i, c in enumerate(summary_clusters):
         state.lines[i].lon, state.lines[i].lat = cluster_to_graph(state.locations[c])
@@ -162,8 +162,8 @@ def plot_sample_map(state: AppState, i_sample: int):
     # colors = np.full(state.objects.n_objects, "lightgrey", dtype=object)
 
     any_cluster = np.any(state.clusters[:, i_sample], axis=0)
-    state.object_data["cluster"][any_cluster] = np.nonzero(state.clusters[:, i_sample].T)[1]
-    state.object_data["cluster"][~any_cluster] = -1
+    state.object_data.loc[any_cluster, "cluster"] = np.nonzero(state.clusters[:, i_sample].T)[1]
+    state.object_data.loc[~any_cluster, "cluster"] = -1
     state.scatter.customdata[~any_cluster, 2] = ""
 
     for i, c in enumerate(state.clusters[:, i_sample, :]):

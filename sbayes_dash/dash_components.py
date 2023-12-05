@@ -105,8 +105,7 @@ def get_family_sizes(object_data: pd.DataFrame) -> pd.DataFrame:
         .sort_values("size", ascending=False)
 
     family_sizes["is_isolate"] = family_sizes.family == ""
-    family_sizes.family[family_sizes.is_isolate] = "Isolates and singleton families"
-
+    family_sizes.loc[family_sizes.is_isolate, "family"] = "Isolates and singleton families"
     return family_sizes
 
 
@@ -165,10 +164,10 @@ def build_results_components(state: AppState, start_with_summarize: bool = True)
                               labelPosition="top", on=start_with_summarize)
         ], style={"width": "9%", "display": "inline-block"}),
         dcc.Graph(id="trace", figure=trace_fig, style={"width": "93vw", "height": "160px"}),
-        dcc.Graph(id="map", figure=results_map, style={"width": "90vw"}),
+        dcc.Graph(id="map", figure=results_map, style={"width": "95vw", "margin-left": "1.8vw"}),
         html.Div([
             html.Button("Download map as HTML", id="download-map-button"),
             dcc.Download(id="download-map"),
 
         ]),
-    ])
+    ], style={'textAlign': 'center'})
